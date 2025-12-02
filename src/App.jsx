@@ -9,15 +9,21 @@ function App() {
   const [showInput, setShowInput] = useState(false);
   const [result, setResult] = useState(null);
   const [audioUrl, setAudioUrl] = useState(null);
-  
-  // Dev tools
-  const [mockMode, setMockMode] = useState(false);
-  const [mockDay, setMockDay] = useState(1);
-  const [devToolsOpen, setDevToolsOpen] = useState(false);
+  const [learnedWords, setLearnedWords] = useState([]);
+  const [showFlashcards, setShowFlashcards] = useState(false);
+  const [currentFlashcard, setCurrentFlashcard] = useState(0);
+  const [showAnswer, setShowAnswer] = useState(false);
+
+  // Load learned words from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('learnedWords');
+    if (saved) {
+      setLearnedWords(JSON.parse(saved));
+    }
+  }, []);
 
   // Get current day in December
   const getCurrentDay = () => {
-    if (mockMode) return mockDay;
     const now = new Date();
     if (now.getMonth() !== 11) return 1; // Not December
     return now.getDate();
@@ -38,8 +44,8 @@ function App() {
   const openDoor = (day) => {
     const dayStr = String(day);
     
-    // Check if door can be opened
-    if (day !== today && !mockMode) {
+    // Check if door can be opened (allow past days and today)
+    if (day > today) {
       setResult({
         type: 'locked',
         message: `🔒 Zu früh! Heute ist erst Tag ${today}. Geduld ist eine Tugend!`
@@ -90,6 +96,20 @@ function App() {
         correctAnswer.includes(userAnswer)) {
       // Correct!
       generateAudio(dayData.it);
+      
+      // Add to learned words if not already there
+      const newWord = {
+        day: currentDay,
+        italian: dayData.it,
+        german: dayData.de,
+        pronunciation: dayData.pronunciation,
+        date: new Date().toISOString()
+      };
+      
+      const updatedWords = [...learnedWords.filter(w => w.day !== currentDay), newWord];
+      setLearnedWords(updatedWords);
+      localStorage.setItem('learnedWords', JSON.stringify(updatedWords));
+      
       setResult({
         type: 'success',
         data: dayData
@@ -118,54 +138,128 @@ function App() {
     }
   };
 
+  const nextFlashcard = () => {
+    setShowAnswer(false);
+    setCurrentFlashcard((prev) => (prev + 1) % learnedWords.length);
+  };
+
+  const prevFlashcard = () => {
+    setShowAnswer(false);
+    setCurrentFlashcard((prev) => (prev - 1 + learnedWords.length) % learnedWords.length);
+  };
+
+  const playFlashcardAudio = (text) => {
+    generateAudio(text);
+  };
+
   return (
     <div className="app-container">
       <div className="header">
         <div className="header-title">🎄 Calendario dell'Avvento 🎄</div>
         <div className="header-subtitle">Italienisch für die Visite in Bruneck</div>
-      </div>
-
-      <div className="dev-tools">
-        <h3 onClick={() => setDevToolsOpen(!devToolsOpen)}>
-          🛠️ Entwickler-Tools (Nur zum Testen) {devToolsOpen ? '▼' : '▶'}
-        </h3>
-        {devToolsOpen && (
-          <div className="dev-tools-content">
-            <label>
-              <input 
-                type="checkbox" 
-                checked={mockMode}
-                onChange={(e) => setMockMode(e.target.checked)}
-              />
-              Test-Modus aktivieren
-            </label>
-            <label>
-              Tag simulieren: {mockDay}
-              <input 
-                type="range" 
-                min="1" 
-                max="24" 
-                value={mockDay}
-                onChange={(e) => setMockDay(Number(e.target.value))}
-              />
-            </label>
-          </div>
+        {learnedWords.length > 0 && (
+          <button 
+            className="flashcard-toggle-btn"
+            onClick={() => {
+              setShowFlashcards(!showFlashcards);
+              setCurrentFlashcard(0);
+              setShowAnswer(false);
+            }}
+          >
+            📚 Karteikarten ({learnedWords.length})
+          </button>
         )}
       </div>
 
-      <div className="main-content">
+      {showFlashcards && learnedWords.length > 0 ? (
+        <div className="flashcard-container">
+          <div className="flashcard-header">
+            <h2>🎓 Deine gelernten Vokabeln</h2>
+            <button 
+              className="close-flashcards-btn"
+              onClick={() => setShowFlashcards(false)}
+            >
+              ✕ Schließen
+            </button>
+          </div>
+          
+          <div className="flashcard-box">
+            <div className="flashcard-counter">
+              Karte {currentFlashcard + 1} von {learnedWords.length}
+            </div>
+            
+            <div className={`flashcard ${showAnswer ? 'flipped' : ''}`}>
+              <div className="flashcard-front">
+                <div className="flashcard-day">Tag {learnedWords[currentFlashcard].day}</div>
+                <div className="flashcard-word-it">
+                  {learnedWords[currentFlashcard].italian}
+                </div>
+                {learnedWords[currentFlashcard].pronunciation && (
+                  <div className="flashcard-pronunciation">
+                    [{learnedWords[currentFlashcard].pronunciation}]
+                  </div>
+                )}
+                <button 
+                  className="audio-btn"
+                  onClick={() => playFlashcardAudio(learnedWords[currentFlashcard].italian)}
+                >
+                  🔊 Anhören
+                </button>
+              </div>
+              
+              {showAnswer && (
+                <div className="flashcard-back">
+                  <div className="flashcard-word-de">
+                    {learnedWords[currentFlashcard].german}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="flashcard-controls">
+              <button 
+                className="flashcard-nav-btn"
+                onClick={prevFlashcard}
+                disabled={learnedWords.length <= 1}
+              >
+                ← Zurück
+              </button>
+              
+              <button 
+                className="flashcard-reveal-btn"
+                onClick={() => setShowAnswer(!showAnswer)}
+              >
+                {showAnswer ? '🙈 Verbergen' : '👁️ Lösung zeigen'}
+              </button>
+              
+              <button 
+                className="flashcard-nav-btn"
+                onClick={nextFlashcard}
+                disabled={learnedWords.length <= 1}
+              >
+                Weiter →
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="main-content">
         <div className="calendar-section">
           <div className="calendar-grid">
-            {Array.from({ length: 24 }, (_, i) => i + 1).map((day) => (
-              <button
-                key={day}
-                className={`calendar-btn ${day === today && !mockMode ? 'today' : ''}`}
-                onClick={() => openDoor(day)}
-                disabled={day !== today && !mockMode}
-              >
-                {day}
-              </button>
-            ))}
+            {Array.from({ length: 24 }, (_, i) => i + 1).map((day) => {
+              const isLearned = learnedWords.some(w => w.day === String(day));
+              return (
+                <button
+                  key={day}
+                  className={`calendar-btn ${day === today ? 'today' : ''} ${isLearned ? 'learned' : ''}`}
+                  onClick={() => openDoor(day)}
+                  disabled={day > today}
+                >
+                  {day}
+                  {isLearned && <span className="learned-badge">✓</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -258,6 +352,7 @@ function App() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
