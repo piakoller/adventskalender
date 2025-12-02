@@ -1,3 +1,4 @@
+# Ignore source files - only deploy built files
 node_modules/
 .git/
 .gitignore
@@ -5,4 +6,5 @@ src/
 package.json
 package-lock.json
 vite.config.js
-README.md
+dist/
+.spacesignore
